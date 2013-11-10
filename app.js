@@ -10,12 +10,11 @@ var world = [];
 var start = [];
 var finish = [];
 var target = [];
-var visitedEndpoints = [];
 const passableTerrain = [types.FINISH,types.FREE,types.START,types.TARGET];
 var readyInt =setInterval(ifReady,200);
 
 ////////// GENERALS
-Object.prototype.clone = function () {
+var clone = function () {
     var clone = this instanceof Array ? [] : {};
     for (var i in this) {
         if(this.hasOwnProperty(i)){
@@ -27,29 +26,30 @@ Object.prototype.clone = function () {
     }
     return clone;
 };
-Array.prototype.equals = function (array) {
-    // if the other array is a false value, return
-    if (!array)
-        return false;
-
-    // compare lengths - can save a lot of time
-    if (this.length != array.length)
-        return false;
-
-    for (var i = 0; i < this.length; i++) {
-        // Check if we have nested arrays
-        if (this[i] instanceof Array && array[i] instanceof Array) {
-            // recurse into the nested arrays
-            if (!this[i].equals(array[i]))
-                return false;
-        }
-        else if (this[i] != array[i]) {
-            // Warning - two different object instances will never be equal: {x:20} != {x:20}
-            return false;
+Object.prototype.clone = clone;
+Array.prototype.clone = clone;
+/*console.log(equals({x:20},{x:20}) == true);
+console.log(equals([1,2,3],[1,2,3]) == true);
+console.log(equals([[1,2,3],[4,5,6],[7,8,9]],[[1,2,3],[4,5,6]]) == false);
+console.log(equals([1,2,{x:20}],[1,2,{y:20}]) == false);
+console.log(equals([1,2,{x:20}],[1,2,{x:20}]) == true);
+console.log(equals([1,2,{x:20}],[1,2,{y:20,x:20}]) == false);*/
+function equals(obj1,obj2) {
+    // if the other object is a false value, return
+    if (! (obj1&&obj2) ) return false;
+    // if we comparing numbers, booleans, strings, etc., then this:
+    if(typeof (obj1) == typeof(obj2) && typeof(obj1) != "object" ){
+        return obj1 == obj2;
+    }
+    // compare lengths of objects - can save a lot of time
+    if(Object.keys(obj1).length != Object.keys(obj2).length) return false;
+    for (var i in obj1) {
+        if(obj1.hasOwnProperty(i)){
+            if(!equals(obj1[i],obj2[i])) return false;
         }
     }
     return true;
-};
+}
 ///////// END GENERALS
 
 fs.readFile( __dirname + '/map2', function (err, data) {
@@ -65,7 +65,6 @@ fs.readFile( __dirname + '/map2', function (err, data) {
 	}
 	world = strings;
 });
-
 function ifReady() {
 	if (world){
 		clearInterval(readyInt);
@@ -74,7 +73,6 @@ function ifReady() {
 		console.log();
 	}
 }
-
 function prepare(){
 	var i,j;
 	//find start point
@@ -99,6 +97,14 @@ function prepare(){
 }
 
 function findWayOut(c) {
+    function createContext(currentPosition,stage,route){
+        return {
+            route : route.clone(),
+            currentPosition: currentPosition.clone(),
+            stage: stage
+        }
+    }
+
     function analyzeMap(c) {
         if(!c) throw new Error("context is null");
         var i=0, j=0,new_i=0, new_j=0, stops=0;
@@ -120,7 +126,8 @@ function findWayOut(c) {
                 stops++;
             }
             if(passableTerrain.indexOf(world[i][j]) == -1){
-                possibleDestinations.push([new_i,j]);
+                //possibleDestinations.push([new_i,j]);
+                possibleDestinations.push(createContext([new_i,j], c.stage, c.currentPosition));
                 stops = 2;
             }
         }
@@ -135,7 +142,8 @@ function findWayOut(c) {
                 ++stops;
             }
             if(passableTerrain.indexOf(world[i][j]) == -1){
-                possibleDestinations.push([i,new_j]);
+                //possibleDestinations.push([i,new_j]);
+                possibleDestinations.push(createContext([i,new_j], c.stage, c.currentPosition));
                 stops = 2;
             }
         }
@@ -149,7 +157,8 @@ function findWayOut(c) {
                 ++stops;
             }
             if(passableTerrain.indexOf(world[i][j]) == -1){
-                possibleDestinations.push([new_i,j]);
+                //possibleDestinations.push([new_i,j]);
+                possibleDestinations.push(createContext([new_i,j], c.stage, c.currentPosition));
                 stops = 2;
             }
         }
@@ -164,7 +173,8 @@ function findWayOut(c) {
                 ++stops;
             }
             if(passableTerrain.indexOf(world[i][j]) == -1){
-                possibleDestinations.push([i,new_j]);
+                //possibleDestinations.push([i,new_j]);
+                possibleDestinations.push(createContext([i,new_j], c.stage, c.currentPosition));
                 stops = 2;
             }
         }
@@ -175,46 +185,41 @@ function findWayOut(c) {
 
 	if (!c){
 		//creating default context
-		c = {
-            route : [],
-            length : 0,
-			currentPosition : start.slice(),
-			stage: 0 // 1 — got target , 2 — got finish
-		}
+		c = createContext(start,0,[]);
 	}
-    visitedEndpoints.push(c.currentPosition);
-    var possibleDestinations = analyzeMap(c);
-    console.log("POSSIBLE");
-    console.log(possibleDestinations);
 
+    var visitedEndpoints = [];
+    var wavefront = [c.clone()];
+    var cntr = 0;
+    while(cntr<3){
 
-    var newDestinations = [];
-    for (var i = 0;i<possibleDestinations.length;++i){
-        var found = false;
-        for (var j=0;j<visitedEndpoints.length;++j){
-            if (visitedEndpoints[j].equals(possibleDestinations[i])) {
-                found = true;
-                break;
+        console.log("Round "+cntr);
+        console.log(wavefront);
+        var dest = [];
+        for(var i = 0;i<wavefront.length;i++){
+            visitedEndpoints.push(wavefront[i]);
+            dest = dest.concat(analyzeMap(wavefront[i]));
+        }
+        //removing dupes in dest
+        for(var j=0;j<dest.length;j++){
+            for(var k=j+1;k<dest.length;k++){
+                if(equals(dest[j].stage,dest[k].stage) &&
+                   equals(dest[j].currentPosition,dest[k].currentPosition)){
+                    dest.splice(k,1);
+                }
             }
         }
-        if (!found){
-            newDestinations.push(possibleDestinations[i]);
+        //removing already visited points from dest
+        for(var l=0;l<visitedEndpoints.length;l++){
+            for(var m=0;m<dest.length;m++){
+                if(equals(dest[m].stage,visitedEndpoints[l].stage) &&
+                   equals(dest[m].currentPosition,visitedEndpoints[l].currentPosition)){
+                    dest.splice(m,1);
+                }
+            }
         }
+
+        wavefront = dest.slice();
+        cntr++;
     }
-    console.log("NEW");
-
-    console.log(newDestinations);
-    console.log("===============================================================");
-
-    if(newDestinations.length == 0) console.log(c.route);
-    for (var k = 0;k<newDestinations.length;++k){
-        var cc = c.clone();
-        cc.route.push(c.currentPosition);
-        ++cc.length;
-        cc.currentPosition = newDestinations[k];
-
-        findWayOut(cc);
-    }
-
-
 }
