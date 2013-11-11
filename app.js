@@ -36,7 +36,7 @@ console.log(equals([1,2,{x:20}],[1,2,{x:20}]) == true);
 console.log(equals([1,2,{x:20}],[1,2,{y:20,x:20}]) == false);*/
 function equals(obj1,obj2) {
     // if the other object is a false value, return
-    if (! (obj1&&obj2) ) return false;
+    if (obj1==null || obj2 == null) return false;
     // if we comparing numbers, booleans, strings, etc., then this:
     if(typeof (obj1) == typeof(obj2) && typeof(obj1) != "object" ){
         return obj1 == obj2;
@@ -107,7 +107,7 @@ function findWayOut(c) {
 
     function analyzeMap(c) {
         if(!c) throw new Error("context is null");
-        var i=0, j=0,new_i=0, new_j=0, stops=0;
+        var i=0, j=0,new_i=0, new_j=0, stops= 0, newRoute;
         var possibleDestinations = [];
         function rewind(){
             i = c.currentPosition[0];
@@ -127,7 +127,9 @@ function findWayOut(c) {
             }
             if(passableTerrain.indexOf(world[i][j]) == -1){
                 //possibleDestinations.push([new_i,j]);
-                possibleDestinations.push(createContext([new_i,j], c.stage, c.currentPosition));
+                newRoute = c.route.clone();
+                newRoute.push(c.currentPosition);
+                possibleDestinations.push(createContext([new_i,j], c.stage, newRoute));
                 stops = 2;
             }
         }
@@ -143,7 +145,9 @@ function findWayOut(c) {
             }
             if(passableTerrain.indexOf(world[i][j]) == -1){
                 //possibleDestinations.push([i,new_j]);
-                possibleDestinations.push(createContext([i,new_j], c.stage, c.currentPosition));
+                newRoute = c.route.clone();
+                newRoute.push(c.currentPosition);
+                possibleDestinations.push(createContext([i,new_j], c.stage, newRoute));
                 stops = 2;
             }
         }
@@ -158,7 +162,9 @@ function findWayOut(c) {
             }
             if(passableTerrain.indexOf(world[i][j]) == -1){
                 //possibleDestinations.push([new_i,j]);
-                possibleDestinations.push(createContext([new_i,j], c.stage, c.currentPosition));
+                newRoute = c.route.clone();
+                newRoute.push(c.currentPosition);
+                possibleDestinations.push(createContext([new_i,j], c.stage, newRoute));
                 stops = 2;
             }
         }
@@ -174,7 +180,9 @@ function findWayOut(c) {
             }
             if(passableTerrain.indexOf(world[i][j]) == -1){
                 //possibleDestinations.push([i,new_j]);
-                possibleDestinations.push(createContext([i,new_j], c.stage, c.currentPosition));
+                newRoute = c.route.clone();
+                newRoute.push(c.currentPosition);
+                possibleDestinations.push(createContext([i,new_j], c.stage, newRoute));
                 stops = 2;
             }
         }
@@ -191,35 +199,37 @@ function findWayOut(c) {
     var visitedEndpoints = [];
     var wavefront = [c.clone()];
     var cntr = 0;
-    while(cntr<3){
+    while(cntr<5){
 
         console.log("Round "+cntr);
         console.log(wavefront);
         var dest = [];
-        for(var i = 0;i<wavefront.length;i++){
+        for(var i = 0;i<wavefront.length;++i){
             visitedEndpoints.push(wavefront[i]);
             dest = dest.concat(analyzeMap(wavefront[i]));
         }
         //removing dupes in dest
-        for(var j=0;j<dest.length;j++){
-            for(var k=j+1;k<dest.length;k++){
+        for(var j=0;j<dest.length;++j){
+            var k=  j+1;
+            while(k<dest.length){
                 if(equals(dest[j].stage,dest[k].stage) &&
                    equals(dest[j].currentPosition,dest[k].currentPosition)){
                     dest.splice(k,1);
-                }
+                } else ++k;
             }
         }
         //removing already visited points from dest
-        for(var l=0;l<visitedEndpoints.length;l++){
-            for(var m=0;m<dest.length;m++){
+        for(var l=0;l<visitedEndpoints.length;++l){
+            var m = 0;
+            while(m<dest.length){
                 if(equals(dest[m].stage,visitedEndpoints[l].stage) &&
                    equals(dest[m].currentPosition,visitedEndpoints[l].currentPosition)){
                     dest.splice(m,1);
-                }
+                } else ++m;
             }
         }
 
         wavefront = dest.slice();
-        cntr++;
+        ++cntr;
     }
 }
