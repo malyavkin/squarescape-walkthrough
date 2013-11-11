@@ -1,4 +1,5 @@
 var fs = require('fs');
+var util = require('util');
 const types = {
 	VOID : '0',
 	FINISH: '1',
@@ -10,7 +11,7 @@ var world = [];
 var start = [];
 var finish = [];
 var target = [];
-const passableTerrain = [types.FINISH,types.FREE,types.START,types.TARGET];
+var solutions = [];
 var readyInt =setInterval(ifReady,200);
 
 ////////// GENERALS
@@ -52,7 +53,7 @@ function equals(obj1,obj2) {
 }
 ///////// END GENERALS
 
-fs.readFile( __dirname + '/map2', function (err, data) {
+fs.readFile( __dirname + '/map', function (err, data) {
 	if (err) {
 		throw err;
 	}
@@ -107,86 +108,64 @@ function findWayOut(c) {
 
     function analyzeMap(c) {
         if(!c) throw new Error("context is null");
-        var i=0, j=0,new_i=0, new_j=0, stops= 0, newRoute;
         var possibleDestinations = [];
-        function rewind(){
-            i = c.currentPosition[0];
-            j = c.currentPosition[1];
-            stops = 0;
+        function go(c,functor){
+            var stops = 0;
+            var cPos = {i: c.currentPosition[0],
+                        j: c.currentPosition[1]};
+            var lastPos = {i:0, j:0};
+            var stage = c.stage;
+            var newRoute = c.route.clone();
+            while(stops<2){
+                lastPos = cPos.clone();
+                cPos = functor(cPos);
+                //looping through walls
+                while(i<0) {++stops; i+=world.length;}
+                while(j<0) {++stops; j+=world[0].length;}
+                while(i>= world.length) {++stops; i-=world.length;}
+                while(j>= world[0].length) {++stops; j-=world[0].length;}
+                switch (world[cPos.i][cPos.j]){
+                    case types.VOID:{
+                        newRoute = c.route.clone();
+                        newRoute.push(c.currentPosition);
+                        possibleDestinations.push(createContext([lastPos.i,lastPos.j], stage, newRoute));
+                        stops = 2;
+                        break;
+                    }
+                    case types.TARGET:{
+                        if(stage == 0) stage = 1;
+                        else stops = 2;
+                        break;
+                    }
+                    case types.FINISH:{
+                        if(stage == 1) {
+                            stage = 2;
+                            newRoute = c.route.clone();
+                            newRoute.push(c.currentPosition);
+                            solutions.push(createContext([cPos.i,cPos.j], stage, newRoute));
+                            stops = 2;
+                        }
+                        else stops = 2;
+                        break;
+                    }
+                    case types.FREE:
+                        break;
+                    case types.START:
+                        break;
+                    default:
+                        break;
+                }
+            }
         }
         // 4way
-
-        //top (-i)
-        rewind();
-        while(stops!=2){
-            new_i = i;
-            --i;
-            if(i<0) {
-                i = world.length-1;
-                stops++;
-            }
-            if(passableTerrain.indexOf(world[i][j]) == -1){
-                //possibleDestinations.push([new_i,j]);
-                newRoute = c.route.clone();
-                newRoute.push(c.currentPosition);
-                possibleDestinations.push(createContext([new_i,j], c.stage, newRoute));
-                stops = 2;
-            }
-        }
-
+        //top (-i)  function(p){return {i:p.i-1, j:p.j}}
+        go(c,function(p){return {i:p.i-1, j:p.j  }});
         //right (+j)
-        rewind();
-        while(stops!=2){
-            new_j = j;
-            ++j;
-            if(j==world[0].length) {
-                j = 0;
-                ++stops;
-            }
-            if(passableTerrain.indexOf(world[i][j]) == -1){
-                //possibleDestinations.push([i,new_j]);
-                newRoute = c.route.clone();
-                newRoute.push(c.currentPosition);
-                possibleDestinations.push(createContext([i,new_j], c.stage, newRoute));
-                stops = 2;
-            }
-        }
+        go(c,function(p){return {i:p.i  , j:p.j+1}});
         //bot (+i)
-        rewind();
-        while(stops!=2){
-            new_i = i;
-            ++i;
-            if(i==world.length) {
-                i = 0;
-                ++stops;
-            }
-            if(passableTerrain.indexOf(world[i][j]) == -1){
-                //possibleDestinations.push([new_i,j]);
-                newRoute = c.route.clone();
-                newRoute.push(c.currentPosition);
-                possibleDestinations.push(createContext([new_i,j], c.stage, newRoute));
-                stops = 2;
-            }
-        }
+        go(c,function(p){return {i:p.i+1, j:p.j  }});
         //left (-j)
-        rewind();
-
-        while(stops!=2){
-            new_j = j;
-            --j;
-            if(j<0) {
-                j = world[0].length-1;
-                ++stops;
-            }
-            if(passableTerrain.indexOf(world[i][j]) == -1){
-                //possibleDestinations.push([i,new_j]);
-                newRoute = c.route.clone();
-                newRoute.push(c.currentPosition);
-                possibleDestinations.push(createContext([i,new_j], c.stage, newRoute));
-                stops = 2;
-            }
-        }
-
+        go(c,function(p){return {i:p.i  , j:p.j-1}});
 
         return possibleDestinations;
     }
@@ -198,11 +177,10 @@ function findWayOut(c) {
 
     var visitedEndpoints = [];
     var wavefront = [c.clone()];
-    var cntr = 0;
-    while(cntr<5){
-
-        console.log("Round "+cntr);
-        console.log(wavefront);
+    var counter = 0;
+    while(wavefront.length != 0){
+        console.log("Round "+counter++);
+        console.log(util.inspect(wavefront, false, null));
         var dest = [];
         for(var i = 0;i<wavefront.length;++i){
             visitedEndpoints.push(wavefront[i]);
@@ -228,8 +206,13 @@ function findWayOut(c) {
                 } else ++m;
             }
         }
-
         wavefront = dest.slice();
-        ++cntr;
     }
+
+    console.log("done! Found solutions:");
+    for(var s = 0;s<solutions.length;++s){
+        console.log(solutions[s].route.concat([solutions[s].currentPosition]));
+    }
+
+
 }
