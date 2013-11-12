@@ -1,6 +1,6 @@
 var fs = require('fs');
 var util = require('util');
-const fn = "/map";
+const fn = "/map2";
 const types = {
 	VOID : '#',
 	FINISH: 'F',
@@ -14,7 +14,6 @@ var world = [];
 var start = [];
 var finish = [];
 var target = [];
-var solutions = [];
 var readyInt =setInterval(ifReady,200);
 
 ////////// GENERALS
@@ -55,7 +54,6 @@ function equals(obj1,obj2) {
     return true;
 }
 ///////// END GENERALS
-
 fs.readFile( __dirname + fn, function (err, data) {
 	if (err) {
 		throw err;
@@ -67,7 +65,7 @@ fs.readFile( __dirname + fn, function (err, data) {
 		strings[i] =strings[i].split('');
 	}
 	world = strings;
-    console.log(world);
+    console.log(raw);
 });
 function ifReady() {
 	if (world){
@@ -101,7 +99,6 @@ function prepare(){
 
     console.log(start,target,finish);
 }
-
 function findWayOut(c) {
     function createContext(currentPosition,stage,route,directions){
         return {
@@ -111,13 +108,13 @@ function findWayOut(c) {
             stage: stage
         }
     }
-
     function analyzeMap(c) {
         if(!c) throw new Error("context is null");
         var possibleDestinations = [];
         function go(c,functor,pretty){
-            var trace = "";
+            var trace = pretty+" ";
             var stops = 0;
+            var passed_portals = [];
             var cPos = {i: c.currentPosition[0],
                         j: c.currentPosition[1]};
             var lastPos = {i:0, j:0};
@@ -135,7 +132,9 @@ function findWayOut(c) {
                 while(cPos.i>= world.length) {++stops; cPos.i-=world.length;trace+="|";}
                 while(cPos.j>= world[0].length) {++stops; cPos.j-=world[0].length;trace+="|";}
                 trace+=(world[cPos.i][cPos.j]).toString();
-                switch (world[cPos.i][cPos.j]){
+                if (/[0-9]/.test(world[cPos.i][cPos.j])){
+                    //portal
+                } else switch (world[cPos.i][cPos.j]){
                     case types.STOP:{
                         possibleDestinations.push(createContext([cPos.i,cPos.j], stage, newRoute,newDirs.concat([pretty])));
                         stops = 2;
@@ -173,8 +172,7 @@ function findWayOut(c) {
                         stops = 2;
                         break;
                     default:
-                        trace+="?["+(world[cPos.i][cPos.j])+"]";
-                        throw new Error("what is that");
+                        throw new Error("what is that"+"["+(world[cPos.i][cPos.j])+"]");
                         break;
                 }
             }
@@ -182,16 +180,12 @@ function findWayOut(c) {
         }
         // 4way
         //top (-i)  function(p){return {i:p.i-1, j:p.j}}
-        console.log("up");
         go(c,function(p){return {i:p.i-1, j:p.j  }},"^");
         //right (+j)
-        console.log("right");
         go(c,function(p){return {i:p.i  , j:p.j+1}},">");
         //bot (+i)
-        console.log("down");
         go(c,function(p){return {i:p.i+1, j:p.j  }},"v");
         //left (-j)
-        console.log("left");
         go(c,function(p){return {i:p.i  , j:p.j-1}},"<");
 
         return possibleDestinations;
@@ -201,15 +195,17 @@ function findWayOut(c) {
 		//creating default context
 		c = createContext(start,0,[],[]);
 	}
-
     var visitedEndpoints = [];
+    var solutions = [];
     var wavefront = [c.clone()];
     var counter = 0;
     while(wavefront.length != 0){
-        console.log("Round "+counter++);
+        console.log("====================");
+        console.log("Round "+ ++counter);
         console.log(util.inspect(wavefront, false, null));
         var dest = [];
         for(var i = 0;i<wavefront.length;++i){
+            console.log(counter+"."+i);
             visitedEndpoints.push(wavefront[i]);
             dest = dest.concat(analyzeMap(wavefront[i]));
         }
@@ -244,10 +240,8 @@ function findWayOut(c) {
             //console.log(solutions[s].route[ss]);
         }
         console.log("fin:",[solutions[s].currentPosition]);
-
-
-
     }
-
-
+    if(solutions.length == 0){
+        console.log("    none")
+    }
 }
