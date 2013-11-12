@@ -152,7 +152,7 @@ function findWayOut(c) {
                         if(stage == 0) stage = 1;
                         else stops = 2;
                         trace+="*";
-                        pretty+="*"
+                        pretty+="*";
                         break;
                     }
                     case types.FINISH:{
