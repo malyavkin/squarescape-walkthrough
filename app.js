@@ -1,11 +1,14 @@
 var fs = require('fs');
 var util = require('util');
+const fn = "/map";
 const types = {
-	VOID : '0',
-	FINISH: '1',
-	TARGET: '2',
-	FREE: '3',
-	START: '4'
+	VOID : '#',
+	FINISH: 'F',
+	TARGET: '*',
+	FREE: '.',
+	START: 'S',
+    DEATH: 'X',
+    STOP : '+'
 };
 var world = [];
 var start = [];
@@ -53,25 +56,25 @@ function equals(obj1,obj2) {
 }
 ///////// END GENERALS
 
-fs.readFile( __dirname + '/map', function (err, data) {
+fs.readFile( __dirname + fn, function (err, data) {
 	if (err) {
 		throw err;
 	}
 	var raw = data.toString();
-	var mapStr = raw.substring(raw.indexOf("layer 0")+9,raw.length-2);
-	var strings = mapStr.split(',\r\n');
-	strings.pop();
+
+	var strings = raw.split('\n');
 	for(var i=0; i< strings.length;i++){
-		strings[i] =strings[i].split(',');
+		strings[i] =strings[i].split('');
 	}
 	world = strings;
+    console.log(world);
 });
 function ifReady() {
 	if (world){
 		clearInterval(readyInt);
 		prepare();
 		findWayOut();
-		console.log();
+
 	}
 }
 function prepare(){
@@ -95,6 +98,8 @@ function prepare(){
 		if(j!=-1) break;
 	}
 	finish = [i,j];
+
+    console.log(start,target,finish);
 }
 
 function findWayOut(c) {
@@ -102,6 +107,7 @@ function findWayOut(c) {
         return {
             route : route.clone(),
             currentPosition: currentPosition.clone(),
+            //directions:directions,
             stage: stage
         }
     }
@@ -109,40 +115,51 @@ function findWayOut(c) {
     function analyzeMap(c) {
         if(!c) throw new Error("context is null");
         var possibleDestinations = [];
-        function go(c,functor){
+        function go(c,functor,pretty){
+            var trace = "";
             var stops = 0;
             var cPos = {i: c.currentPosition[0],
                         j: c.currentPosition[1]};
             var lastPos = {i:0, j:0};
             var stage = c.stage;
             var newRoute = c.route.clone();
+            newRoute.push(c.currentPosition);
+            //var newDirs = c.directions.clone();
+            //newDirs.push(pretty);
             while(stops<2){
                 lastPos = cPos.clone();
                 cPos = functor(cPos);
                 //looping through walls
-                while(i<0) {++stops; i+=world.length;}
-                while(j<0) {++stops; j+=world[0].length;}
-                while(i>= world.length) {++stops; i-=world.length;}
-                while(j>= world[0].length) {++stops; j-=world[0].length;}
+                while(cPos.i<0) {++stops; cPos.i+=world.length; trace+="|";}
+                while(cPos.j<0) {++stops; cPos.j+=world[0].length;trace+="|";}
+                while(cPos.i>= world.length) {++stops; cPos.i-=world.length;trace+="|";}
+                while(cPos.j>= world[0].length) {++stops; cPos.j-=world[0].length;trace+="|";}
+                trace+=(world[cPos.i][cPos.j]).toString();
                 switch (world[cPos.i][cPos.j]){
+                    //TODO: tracing stops before +, not on it
+                    case types.STOP:{
+                        possibleDestinations.push(createContext([cPos.i,cPos.j], stage, newRoute));
+                        stops = 2;
+                        trace+="[";
+                        break;
+                    }
                     case types.VOID:{
-                        newRoute = c.route.clone();
-                        newRoute.push(c.currentPosition);
                         possibleDestinations.push(createContext([lastPos.i,lastPos.j], stage, newRoute));
                         stops = 2;
+                        trace+="[";
                         break;
                     }
                     case types.TARGET:{
                         if(stage == 0) stage = 1;
                         else stops = 2;
+                        trace+="*";
                         break;
                     }
                     case types.FINISH:{
                         if(stage == 1) {
                             stage = 2;
-                            newRoute = c.route.clone();
-                            newRoute.push(c.currentPosition);
                             solutions.push(createContext([cPos.i,cPos.j], stage, newRoute));
+                            trace+="!";
                             stops = 2;
                         }
                         else stops = 2;
@@ -152,20 +169,30 @@ function findWayOut(c) {
                         break;
                     case types.START:
                         break;
+                    case types.DEATH:
+                        stops = 2;
+                        break;
                     default:
+                        trace+="?["+(world[cPos.i][cPos.j])+"]";
+                        throw new Error("what is that");
                         break;
                 }
             }
+            console.log(trace);
         }
         // 4way
         //top (-i)  function(p){return {i:p.i-1, j:p.j}}
-        go(c,function(p){return {i:p.i-1, j:p.j  }});
+        console.log("up");
+        go(c,function(p){return {i:p.i-1, j:p.j  }},"^");
         //right (+j)
-        go(c,function(p){return {i:p.i  , j:p.j+1}});
+        console.log("right");
+        go(c,function(p){return {i:p.i  , j:p.j+1}},">");
         //bot (+i)
-        go(c,function(p){return {i:p.i+1, j:p.j  }});
+        console.log("down");
+        go(c,function(p){return {i:p.i+1, j:p.j  }},"v");
         //left (-j)
-        go(c,function(p){return {i:p.i  , j:p.j-1}});
+        console.log("left");
+        go(c,function(p){return {i:p.i  , j:p.j-1}},"<");
 
         return possibleDestinations;
     }
@@ -211,7 +238,15 @@ function findWayOut(c) {
 
     console.log("done! Found solutions:");
     for(var s = 0;s<solutions.length;++s){
-        console.log(solutions[s].route.concat([solutions[s].currentPosition]));
+        console.log(s+"("+solutions[s].route.length+")");
+        for(var ss = 0;ss<solutions[s].route.length;++ss){
+            //console.log(solutions[s].route[ss],solutions[s].directions[ss]);
+            console.log(solutions[s].route[ss]);
+        }
+        console.log("fin:",[solutions[s].currentPosition]);
+
+
+
     }
 
 
