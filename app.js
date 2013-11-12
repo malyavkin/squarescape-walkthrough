@@ -103,11 +103,11 @@ function prepare(){
 }
 
 function findWayOut(c) {
-    function createContext(currentPosition,stage,route){
+    function createContext(currentPosition,stage,route,directions){
         return {
             route : route.clone(),
             currentPosition: currentPosition.clone(),
-            //directions:directions,
+            directions:directions,
             stage: stage
         }
     }
@@ -124,8 +124,8 @@ function findWayOut(c) {
             var stage = c.stage;
             var newRoute = c.route.clone();
             newRoute.push(c.currentPosition);
-            //var newDirs = c.directions.clone();
-            //newDirs.push(pretty);
+            var newDirs = c.directions.clone();
+
             while(stops<2){
                 lastPos = cPos.clone();
                 cPos = functor(cPos);
@@ -136,15 +136,14 @@ function findWayOut(c) {
                 while(cPos.j>= world[0].length) {++stops; cPos.j-=world[0].length;trace+="|";}
                 trace+=(world[cPos.i][cPos.j]).toString();
                 switch (world[cPos.i][cPos.j]){
-                    //TODO: tracing stops before +, not on it
                     case types.STOP:{
-                        possibleDestinations.push(createContext([cPos.i,cPos.j], stage, newRoute));
+                        possibleDestinations.push(createContext([cPos.i,cPos.j], stage, newRoute,newDirs.concat([pretty])));
                         stops = 2;
                         trace+="[";
                         break;
                     }
                     case types.VOID:{
-                        possibleDestinations.push(createContext([lastPos.i,lastPos.j], stage, newRoute));
+                        possibleDestinations.push(createContext([lastPos.i,lastPos.j], stage, newRoute,newDirs.concat([pretty])));
                         stops = 2;
                         trace+="[";
                         break;
@@ -153,12 +152,13 @@ function findWayOut(c) {
                         if(stage == 0) stage = 1;
                         else stops = 2;
                         trace+="*";
+                        pretty+="*"
                         break;
                     }
                     case types.FINISH:{
                         if(stage == 1) {
                             stage = 2;
-                            solutions.push(createContext([cPos.i,cPos.j], stage, newRoute));
+                            solutions.push(createContext([cPos.i,cPos.j], stage, newRoute,newDirs.concat([pretty])));
                             trace+="!";
                             stops = 2;
                         }
@@ -199,7 +199,7 @@ function findWayOut(c) {
 
 	if (!c){
 		//creating default context
-		c = createContext(start,0,[]);
+		c = createContext(start,0,[],[]);
 	}
 
     var visitedEndpoints = [];
@@ -240,8 +240,8 @@ function findWayOut(c) {
     for(var s = 0;s<solutions.length;++s){
         console.log(s+"("+solutions[s].route.length+")");
         for(var ss = 0;ss<solutions[s].route.length;++ss){
-            //console.log(solutions[s].route[ss],solutions[s].directions[ss]);
-            console.log(solutions[s].route[ss]);
+            console.log(solutions[s].route[ss],solutions[s].directions[ss]);
+            //console.log(solutions[s].route[ss]);
         }
         console.log("fin:",[solutions[s].currentPosition]);
 
