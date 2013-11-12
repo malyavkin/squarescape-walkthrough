@@ -1,6 +1,6 @@
 var fs = require('fs');
 var util = require('util');
-const fn = "/map2";
+const fn = "/map3";
 const types = {
 	VOID : '#',
 	FINISH: 'F',
@@ -14,6 +14,7 @@ var world = [];
 var start = [];
 var finish = [];
 var target = [];
+var portals = [];
 var readyInt =setInterval(ifReady,200);
 
 ////////// GENERALS
@@ -58,10 +59,9 @@ fs.readFile( __dirname + fn, function (err, data) {
 	if (err) {
 		throw err;
 	}
-	var raw = data.toString();
-
+	var raw = data.toString().replace(/\r/g,"");
 	var strings = raw.split('\n');
-	for(var i=0; i< strings.length;i++){
+	for(var i=0; i< strings.length;++i){
 		strings[i] =strings[i].split('');
 	}
 	world = strings;
@@ -70,34 +70,58 @@ fs.readFile( __dirname + fn, function (err, data) {
 function ifReady() {
 	if (world){
 		clearInterval(readyInt);
-		prepare();
-		findWayOut();
-
+        var valid = prepare();
+        if(valid) findWayOut();
+        else console.log("Map is broken");
 	}
 }
 function prepare(){
-	var i,j;
-	//find start point
-	for(i = 0;i<world.length;i++){
-		j = world[i].lastIndexOf(types.START);
-		if(j!=-1) break;
-	}
-	start = [i,j];
-	//find target point
-	for(i = 0;i<world.length;i++){
-		j = world[i].lastIndexOf(types.TARGET);
-		if(j!=-1) break;
-	}
-	target = [i,j];
-
-	//find finish point
-	for(i = 0;i<world.length;i++){
-		j = world[i].lastIndexOf(types.FINISH);
-		if(j!=-1) break;
-	}
-	finish = [i,j];
-
+    /**
+     * Need to:
+     *  - find start, target and finish points
+     *  - ensure that there is only one point of each kind
+     *  - find all portals
+     *  - ensure that there are exactly two or none of each kind
+     *  - ensure that all rows have equal length
+     */
+    var i,j;
+    var portals_tmp = [];
+    var map_correct = true;
+    for(i=0;i<world.length && map_correct;++i){
+        for(j=0;j<world[0].length && map_correct;++j){
+            if (/[0-9]/.test(world[i][j])){
+                if(!portals_tmp[world[i][j]]){
+                    portals_tmp[world[i][j]] = [[i,j]];
+                } else portals_tmp[world[i][j]].push([i,j]);
+                if(portals_tmp[world[i][j]] >2) map_correct=false;
+            } else switch(world[i][j]){
+                case types.START:{
+                    if(start.length) map_correct=false;
+                    else start = [i,j];
+                    break;
+                }
+                case types.TARGET:{
+                    if(target.length) map_correct=false;
+                    else target = [i,j];
+                    break;
+                }
+                case types.FINISH:{
+                    if(finish.length) map_correct=false;
+                    else finish = [i,j];
+                    break;
+                }
+            }
+        }
+    }
+    for(var k=0;k<portals_tmp.length;++k){
+        if(portals_tmp[k].length != 0 && portals_tmp[k].length != 2  ){
+            map_correct = false;
+        }
+    }
+    if(!(start.length && target.length && finish.length)) map_correct = false;
+    portals = portals_tmp;
     console.log(start,target,finish);
+    return map_correct;
 }
 function findWayOut(c) {
     function createContext(currentPosition,stage,route,directions){
@@ -121,8 +145,6 @@ function findWayOut(c) {
             var stage = c.stage;
             var newRoute = c.route.clone();
             newRoute.push(c.currentPosition);
-            var newDirs = c.directions.clone();
-
             while(stops<2){
                 lastPos = cPos.clone();
                 cPos = functor(cPos);
@@ -134,15 +156,36 @@ function findWayOut(c) {
                 trace+=(world[cPos.i][cPos.j]).toString();
                 if (/[0-9]/.test(world[cPos.i][cPos.j])){
                     //portal
+                    if(passed_portals.indexOf(world[cPos.i][cPos.j])!=-1){
+                        //we've been here
+                        stops = 2;
+                    }else{
+                        passed_portals.push(world[cPos.i][cPos.j]);
+                        stops = 0;
+                        //warping...//
+                        var selected_portal = portals[world[cPos.i][cPos.j]];
+                        if(cPos.i == selected_portal[0][0] && cPos.j == selected_portal[0][1]){
+
+                            cPos.i = selected_portal[1][0];
+                            cPos.j = selected_portal[1][1];
+                        } else {
+                            cPos.i = selected_portal[0][0];
+                            cPos.j = selected_portal[0][1];
+                        }
+                        trace+="~";
+                        pretty+="("+world[cPos.i][cPos.j]+")";
+
+                    }
+
                 } else switch (world[cPos.i][cPos.j]){
                     case types.STOP:{
-                        possibleDestinations.push(createContext([cPos.i,cPos.j], stage, newRoute,newDirs.concat([pretty])));
+                        possibleDestinations.push(createContext([cPos.i,cPos.j], stage, newRoute,c.directions+pretty));
                         stops = 2;
                         trace+="[";
                         break;
                     }
                     case types.VOID:{
-                        possibleDestinations.push(createContext([lastPos.i,lastPos.j], stage, newRoute,newDirs.concat([pretty])));
+                        possibleDestinations.push(createContext([lastPos.i,lastPos.j], stage, newRoute,c.directions+pretty));
                         stops = 2;
                         trace+="[";
                         break;
@@ -150,15 +193,16 @@ function findWayOut(c) {
                     case types.TARGET:{
                         if(stage == 0) stage = 1;
                         else stops = 2;
-                        trace+="*";
+                        trace+="!";
                         pretty+="*";
                         break;
                     }
                     case types.FINISH:{
                         if(stage == 1) {
                             stage = 2;
-                            solutions.push(createContext([cPos.i,cPos.j], stage, newRoute,newDirs.concat([pretty])));
                             trace+="!";
+                            pretty+="!";
+                            solutions.push(createContext([cPos.i,cPos.j], stage, newRoute,c.directions+pretty));
                             stops = 2;
                         }
                         else stops = 2;
@@ -193,7 +237,7 @@ function findWayOut(c) {
 
 	if (!c){
 		//creating default context
-		c = createContext(start,0,[],[]);
+		c = createContext(start,0,[],"");
 	}
     var visitedEndpoints = [];
     var solutions = [];
@@ -231,12 +275,14 @@ function findWayOut(c) {
         }
         wavefront = dest.slice();
     }
-
+    console.log("====================");
     console.log("done! Found solutions:");
     for(var s = 0;s<solutions.length;++s){
-        console.log(s+"("+solutions[s].route.length+")");
+        console.log(s+"(length "+solutions[s].route.length+")");
+        console.log(solutions[s].directions);
+        //console.log(solutions[s].directions.join(""));
         for(var ss = 0;ss<solutions[s].route.length;++ss){
-            console.log(solutions[s].route[ss],solutions[s].directions[ss]);
+            console.log(solutions[s].route[ss]);
             //console.log(solutions[s].route[ss]);
         }
         console.log("fin:",[solutions[s].currentPosition]);
